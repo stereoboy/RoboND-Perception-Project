@@ -57,7 +57,7 @@ def pcl_callback(pcl_msg):
     
     # TODO: Statistical Outlier Filtering
     # Much like the previous filters, we start by creating a filter object:
-    outlier_filter = cloud_filtered.make_statistical_outlier_filter()
+    outlier_filter = cloud.make_statistical_outlier_filter()
     # Set the number of neighboring points to analyze for any given point
     outlier_filter.set_mean_k(50)
     # Set threshold scale factor
@@ -65,8 +65,10 @@ def pcl_callback(pcl_msg):
     # Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered outlier
     outlier_filter.set_std_dev_mul_thresh(x)
 
-# Finally call the filter function for magic
-    cloud_filtered = outlier_filter.filter()
+    # Finally call the filter function for magic
+    #FIXME 
+    #cloud = outlier_filter.filter()
+
     # TODO: Voxel Grid Downsampling
     vox = cloud.make_voxel_grid_filter()
     LEAF_SIZE = 0.01
@@ -79,6 +81,15 @@ def pcl_callback(pcl_msg):
     passthrough.set_filter_field_name(filter_axis)
     axis_min = 0.6
     axis_max = 1.1
+    passthrough.set_filter_limits(axis_min, axis_max)
+
+    cloud_filtered = passthrough.filter()
+    
+    passthrough = cloud_filtered.make_passthrough_filter()
+    filter_axis = 'y'
+    passthrough.set_filter_field_name(filter_axis)
+    axis_min = -0.5
+    axis_max = 0.5
     passthrough.set_filter_limits(axis_min, axis_max)
 
     cloud_filtered = passthrough.filter()
@@ -103,7 +114,7 @@ def pcl_callback(pcl_msg):
     # as well as minimum and maximum cluster size (in points)
     # NOTE: These are poor choices of clustering parameters
     # Your task is to experiment and find values that work for segmenting objects.
-    ec.set_ClusterTolerance(0.014)
+    ec.set_ClusterTolerance(0.012)
     ec.set_MinClusterSize(10)
     ec.set_MaxClusterSize(10000)
     # Search the k-d tree for clusters
@@ -124,6 +135,9 @@ def pcl_callback(pcl_msg):
                                              white_cloud[indice][2],
                                              rgb_to_float(cluster_color[j])])
 
+    #Create new cloud containing all clusters, each with unique color
+    cluster_cloud = pcl.PointCloud_PointXYZRGB()
+    cluster_cloud.from_list(color_cluster_point_list)
 
     # TODO: Convert PCL data to ROS messages
     ros_cloud_objects =  pcl_to_ros(cluster_cloud)
@@ -159,7 +173,7 @@ def pcl_callback(pcl_msg):
 
         # Publish a label into RViz
         label_pos = list(white_cloud[pts_list[0]])
-        label_pos[2] += .4
+        label_pos[2] += .2
         object_markers_pub.publish(make_label(label,label_pos, index))
 
         # Add the detected object to the list of detected objects.
@@ -177,8 +191,9 @@ def pcl_callback(pcl_msg):
     # Suggested location for where to invoke your pr2_mover() function within pcl_callback()
     # Could add some logic to determine whether or not your object detections are robust
     # before calling pr2_mover()
+
     try:
-        pr2_mover(detected_objects_list)
+        pr2_mover(detected_objects)
     except rospy.ROSInterruptException:
         pass
 
@@ -193,7 +208,7 @@ def pr2_mover(object_list):
     # TODO: Get/Read parameters
     object_list_param = rospy.get_param('/object_list')
     dropbox_param = rospy.get_param('/dropbox')
-        
+
     # TODO: Parse parameters into individual variables
     for i in range(len(object_list_param)):
         object_name = object_list_param[i]['name']
@@ -201,7 +216,7 @@ def pr2_mover(object_list):
         pick_object_list.append((object_name, object_group))
 
     for param in dropbox_param:
-        dropbox_info[param['group'] = {'name':param['name'], 'position':param['position']}
+        dropbox_info[param['group']] = {'name':param['name'], 'position':param['position']}
 
     # TODO: Rotate PR2 in place to capture side tables for the collision map
 #    # turn right and get collision map
@@ -216,49 +231,57 @@ def pr2_mover(object_list):
     
     # TODO: Loop through the pick list
     centroids = [] # to be list of tuples (x, y, z)
+    print(pick_object_list)
+    print(dropbox_info)
     for pick_obj in pick_object_list:
         obj_name, obj_group = pick_obj
+        print('pick ' + obj_name)
 
         # Check existance
         found = False
         for i in range(len(object_list)):
+            obj = object_list[i]
             if obj.label == obj_name:
                 found = True
                 obj_cloud = obj.cloud
                 object_list.pop(i)
+                break
 
         if not found:
             rospy.logwarn('{} is not recognized!!!')
-
+            continue
         points_arr = ros_to_pcl(obj_cloud).to_array()
-        centroids = np.mean(points_arr, axis=0)[:3])
+        centroids = np.mean(points_arr, axis=0)[:3]
 
         # Assign test scene num
-        test_scene_num = Int32()
-        test_scene_num.data = TEST_SCENE_NUM
+        test_scene_num_ = Int32()
+        test_scene_num_.data = TEST_SCENE_NUM
 
         # Assign object name
-        object_name = String()
-        object_name.data = object_name
+        print(obj_name)
+        object_name_ = String()
+        object_name_.data = obj_name
 
         # TODO: Get the PointCloud for a given object and obtain it's centroid
-        pick_pose = Pose()
-        pick_pose.position.x = np.asscalar(centroids[0])
-        pick_pose.position.y = np.asscalar(centroids[1])
-        pick_pose.position.z = np.asscalar(centroids[2])
+        print(centroids)
+        pick_pose_ = Pose()
+        pick_pose_.position.x = np.asscalar(centroids[0])
+        pick_pose_.position.y = np.asscalar(centroids[1])
+        pick_pose_.position.z = np.asscalar(centroids[2])
 
         # TODO: Create 'place_pose' for the object
-        place_pose = Pose()
-        place_pose.position.x = dropbox_info[object_group]['position'][0]
-        place_pose.position.y = dropbox_info[object_group]['position'][1]
-        place_pose.position.z = dropbox_info[object_group]['position'][2]
+        place_pose_ = Pose()
+        place_pose_.position.x = dropbox_info[obj_group]['position'][0]
+        place_pose_.position.y = dropbox_info[obj_group]['position'][1]
+        place_pose_.position.z = dropbox_info[obj_group]['position'][2]
 
         # TODO: Assign the arm to be used for pick_place
-        arm_name = String()
-        arm_name.data = dropbox_info[object_group]['name']
+        print(dropbox_info[obj_group]['name'])
+        arm_name_ = String()
+        arm_name_.data = dropbox_info[obj_group]['name']
 
         # TODO: Create a list of dictionaries (made with make_yaml_dict()) for later output to yaml format
-        yaml_dict = make_yaml_dict(test_scene_num, arm_name, object_name, pick_pose, place_pose)
+        yaml_dict = make_yaml_dict(test_scene_num_, arm_name_, object_name_, pick_pose_, place_pose_)
         dict_list.append(yaml_dict)
 
         # Wait for 'pick_place_routine' service to come up
@@ -268,7 +291,7 @@ def pr2_mover(object_list):
             pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
 
             # TODO: Insert your message variables to be sent as a service request
-            resp = pick_place_routine(test_scene_num, object_name, arm_name, pick_pose, place_pose)
+            resp = pick_place_routine(test_scene_num_, object_name_, arm_name_, pick_pose_, place_pose_)
 
             print ("Response: ",resp.success)
 
