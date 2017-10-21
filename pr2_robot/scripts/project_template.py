@@ -24,7 +24,7 @@ from pr2_robot.srv import *
 from rospy_message_converter import message_converter
 import yaml
 
-TEST_SCENE_NUM = 1
+TEST_SCENE_NUM = 3
 
 # Helper function to get surface normals
 def get_normals(cloud):
@@ -71,7 +71,7 @@ def pcl_callback(pcl_msg):
 
     # TODO: Voxel Grid Downsampling
     vox = cloud.make_voxel_grid_filter()
-    LEAF_SIZE = 0.01
+    LEAF_SIZE = 0.005
     vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
     cloud_filtered = vox.filter()
 
@@ -248,7 +248,7 @@ def pr2_mover(object_list):
                 break
 
         if not found:
-            rospy.logwarn('{} is not recognized!!!')
+            rospy.logwarn('{} is not recognized!!!'.format(obj_name))
             continue
         points_arr = ros_to_pcl(obj_cloud).to_array()
         centroids = np.mean(points_arr, axis=0)[:3]
