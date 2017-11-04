@@ -30,6 +30,8 @@
 [image2]: ./rviz_screenshot.png
 [image3]: ./test3_confusion_matrix_1.png
 [image4]: ./test3_confusion_matrix_2.png
+[image5]: ./full_screenshot_extra.png
+[image6]: ./rviz_screenshot_extra.png
 
 ## [Rubric](https://review.udacity.com/#!/rubrics/1067/view) Points
 ### Here I will consider the rubric points individually and describe how I addressed each point in my implementation.  
@@ -102,6 +104,17 @@ And here's another image!
 * [output_1.yaml](./pr2_robot/scripts/output_1.yaml)
 * [output_2.yaml](./pr2_robot/scripts/output_2.yaml)
 * [output_3.yaml](./pr2_robot/scripts/output_3.yaml)
+
+### Extra Challenge
+I implemented Extra challenge. 
+* Rotation by publishing `/pr2/world_joint_controller/command`
+  * Maintaining states.
+  * Skip subscribe processing during rotating actions.
+* Publish table collision map by `/pr2/3d_map/points`
+* Use service of `pick_place_routine` to perform Pick & Place Actions
+
+![alt text][image5]
+![alt text][image6]
 
 ### Discussions
 
