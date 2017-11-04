@@ -26,6 +26,8 @@ import yaml
 
 TEST_SCENE_NUM = 3
 
+STATE = 'not_init' # 0: not initilized 1: state after rotating right 2: state after rotating left 3: initialized
+
 # Helper function to get surface normals
 def get_normals(cloud):
     get_normals_prox = rospy.ServiceProxy('/feature_extractor/get_normals', GetNormals)
@@ -50,6 +52,7 @@ def send_to_yaml(yaml_filename, dict_list):
 # Callback function for your Point Cloud Subscriber
 def pcl_callback(pcl_msg):
 
+    rospy.logwarn(("seq:", pcl_msg.header.seq))
 # Exercise-2 TODOs:
 
     # TODO: Convert ROS msg to PCL data
@@ -84,15 +87,16 @@ def pcl_callback(pcl_msg):
     passthrough.set_filter_limits(axis_min, axis_max)
 
     cloud_filtered = passthrough.filter()
-    
-    passthrough = cloud_filtered.make_passthrough_filter()
-    filter_axis = 'y'
-    passthrough.set_filter_field_name(filter_axis)
-    axis_min = -0.5
-    axis_max = 0.5
-    passthrough.set_filter_limits(axis_min, axis_max)
 
-    cloud_filtered = passthrough.filter()
+    if STATE == 'not_init' or STATE == 'initialized':
+        passthrough = cloud_filtered.make_passthrough_filter()
+        filter_axis = 'y'
+        passthrough.set_filter_field_name(filter_axis)
+        axis_min = -0.5
+        axis_max = 0.5
+        passthrough.set_filter_limits(axis_min, axis_max)
+
+        cloud_filtered = passthrough.filter()
 
     # TODO: RANSAC Plane Segmentation
     seg = cloud_filtered.make_segmenter()
@@ -146,6 +150,9 @@ def pcl_callback(pcl_msg):
     # TODO: Publish ROS messages
     pcl_objects_pub.publish(ros_cloud_objects)
     pcl_table_pub.publish(ros_cloud_table)
+
+    # TODO: Rotate PR2 in place to capture side tables for the collision map
+    pcl_collision_pub.publish(ros_cloud_table)
 
 # Exercise-3 TODOs:
 
@@ -219,16 +226,40 @@ def pr2_mover(object_list):
         dropbox_info[param['group']] = {'name':param['name'], 'position':param['position']}
 
     # TODO: Rotate PR2 in place to capture side tables for the collision map
-#    # turn right and get collision map
-#    control_pub.publish(-np.pi/2)
-#    rate = rospy.Rate(1000)
-#    rate.sleep()
-#
-#     # turn left and get collision map
-#    control_pub.publish(np.pi)
-#    rate.sleep()
+    duration = 10
+    rot_angle = np.pi*0.2
+    global STATE
+    global pcl_sub
+    global right_box_collision
+    global left_box_collision
+    if STATE == 'not_init':
+        # turn right
+        control_pub.publish(-rot_angle)
+        pcl_sub.unregister()
+        rospy.sleep(duration)
+        STATE = 'rot_r'
+        rospy.logwarn("-> rot_r")
+        pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, pcl_callback, queue_size=1)
+        return
+    elif STATE == 'rot_r':
+        # turn left
+        control_pub.publish(rot_angle)
+        pcl_sub.unregister()
+        rospy.sleep(duration*2)
+        STATE = 'rot_l'
+        rospy.logwarn("-> rot_l")
+        pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, pcl_callback, queue_size=1)
+        return
+    elif STATE == 'rot_l':
+        # turn left
+        control_pub.publish(0)
+        pcl_sub.unregister()
+        rospy.sleep(duration)
+        STATE = 'initialized' 
+        rospy.logwarn("-> initialzed")
+        pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, pcl_callback, queue_size=1)
+        return
 
-    
     # TODO: Loop through the pick list
     centroids = [] # to be list of tuples (x, y, z)
     print(pick_object_list)
@@ -312,6 +343,7 @@ if __name__ == '__main__':
     # TODO: Create Publishers
     pcl_objects_pub = rospy.Publisher("/pcl_objects", PointCloud2, queue_size=1)
     pcl_table_pub = rospy.Publisher("/pcl_table", PointCloud2, queue_size=1)
+    pcl_collision_pub = rospy.Publisher("/pr2/3d_map/points", PointCloud2, queue_size=1)
 
     # for the name markers
     object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
